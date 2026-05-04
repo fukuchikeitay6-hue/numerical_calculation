@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data / generated numerical outputs
+data/
+*.npy
+*.npz
+
+# macOS
+.DS_Store
+
+# IDE / editor
+.vscode/
+.idea/
+
