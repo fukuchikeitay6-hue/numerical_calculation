@@ -2,17 +2,17 @@ import mlx.core as mx
 import numpy as np
 
 # パラメータ
-# L_x, L_y = 0.005, 3e-4
-L_x, L_y = 0.05, 0.05
-# T = 0.05
-T = 50
-D = 1e-7
-# vx, vy = 0.01, 0.0
-vx, vy = 0.0, 0.0
-# dx, dy = L_x*1e-3, L_y*1e-3
-dx, dy = L_x * 0.2e-3, L_y*1e-1
-dt = T * 1e-3
-dt = 1e-2
+L_x, L_y = 0.01, 3e-4
+# L_x, L_y = 0.05, 0.05
+T = 0.5
+# T = 50
+D = 1e-8
+vx, vy = 0.022, 0.0
+# vx, vy = 0.0, 0.0
+dx, dy = L_x*1e-3, L_y*1e-2
+# dx, dy = L_x * 0.2e-3, L_y*1e-1
+dt = T * 1e-4
+# dt = 1e-2
 sps = 100        # steps per save
 spf = dt * sps  # seconds per frame
 
@@ -25,8 +25,8 @@ t = mx.arange(0, T, dt, dtype=mx.float32)
 nx = len(x); ny = len(y); nt = len(t)
 
 r = mx.zeros((nx, ny), dtype=mx.float32)
-# r[10:50, 1] = 1e3
-r[1, :] = 1e1
+r[10:200, 1] = 1e3
+# r[1, :] = 1e1
 
 Ax = np.diag(np.full(nx-2, 1+2*rx), k=0) + np.diag(np.full(nx-3, -rx), k=1) + np.diag(np.full(nx-3, -rx), k=-1)
 Ax_inv = mx.array(np.linalg.inv(Ax), dtype=mx.float32)
@@ -86,7 +86,7 @@ for n in range(1, nt):
     if n % sps == 0:
         mx.eval(c_old)
         c_save.append(mx.array(c_old))
-        print(f"{(n / nt * 100):.2f}%")
+        print("\r",f"{(n / nt * 100):.2f}%", end="")
 
 c_save = mx.stack(c_save, axis=0)
 mx.eval(c_save)

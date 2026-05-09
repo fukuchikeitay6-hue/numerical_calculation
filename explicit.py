@@ -2,11 +2,11 @@ import mlx.core as mx
 import numpy as np
 
 # ----- パラメータ -----
-L_x, L_y = 0.05, 0.003
+L_x, L_y = 0.05, 0.0003
 T = 1.0
-D = 1e-6
+D = 1e-8
 vx, vy = 0.1, 0.0
-dx, dy = 1.0e-4, 1.0e-5
+dx, dy = L_x * 1e-3, L_y * 1e-3
 dt = 1.0e-6
 sps = 5000  # steps per save
 spf = dt * sps  # seconds per frame
