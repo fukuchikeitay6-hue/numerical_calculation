@@ -15,6 +15,7 @@ env/
 data/
 *.npy
 *.npz
+*.gif
 
 # macOS
 .DS_Store
@@ -23,4 +24,5 @@ data/
 .vscode/
 .idea/
 
+# AI確認用
 *.html
