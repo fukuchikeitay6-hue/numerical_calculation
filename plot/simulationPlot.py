@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import PyQt6.QtWidgets as qtw
 import PyQt6.QtCore as qtc
-from mainwindow import MainWindow
+from plot.lib.mainwindow import MainWindow
 
 # 1. データの読み込み
 loader = np.load("data.npz", allow_pickle=True)
