@@ -23,7 +23,7 @@ def createSturucturedArray(X:np.ndarray, Y: np.ndarray, u: np.ndarray, v: np.nda
     shape = p.shape
     dt = [("x", float), ("y", float), ("vx", float), ("vy", float)]
     data = np.zeros(shape, dtype=dt)
-    data["x"] = x
+    data["x"] = X
     data["y"] = Y
     data["vx"] = u_centered
     data["vy"] = v_centered
@@ -55,36 +55,27 @@ class MainWindow(qtw.QMainWindow):
         self.timer.setInterval(self.interval_ms)
         self.timer.timeout.connect(self.next_frame)
 
-        self.createWidget()
-        self.createArrowItems()
+        self.createWidgets()
         self.updateDisplay()
     
-    def createWidget(self):
+    def createWidgets(self):
+        # central widget
         cw = qtw.QWidget(self)
         self.setCentralWidget(cw)
         mainLayout = qtw.QVBoxLayout(cw)
 
+        # status label: 現在のフレーム表示など
         self.status_label = qtw.QLabel()
         mainLayout.addWidget(self.status_label)
 
+        # グラフ
         self.plot = pg.PlotWidget()
         self.plot.setAspectLocked(True)
         mainLayout.addWidget(self.plot)
 
-        self.img = pg.ImageItem()
-        self.img.setRect(qtc.QRectF(0, 0, self.Lx, self.Ly))
-        self.img.setZValue(-10)
-        self.plot.addItem(self.img)
-
-        p_inner = self.p[:, 1:-1, 1:-1]
-        self.levels = (float(np.nanmin(p_inner)), float(np.nanmax(p_inner)))
-        self.img.setLevels(self.levels)
-
-        self.colorBar = pg.ColorBarItem(values=self.levels, colorMap=self.cmap, interactive=False)
-        self.colorBar.setImageItem(self.img, insert_in=self.plot.getPlotItem())
+        self.createGraphItems()
 
         # --- ベクトル描画 ---
-
         controls = qtw.QHBoxLayout()
         mainLayout.addLayout(controls)
 
@@ -97,6 +88,24 @@ class MainWindow(qtw.QMainWindow):
         self.slider.setMaximum(self.num_frames -1)
         self.slider.valueChanged.connect(self.setFrame)
         controls.addWidget(self.slider)
+
+    def createGraphItems(self):
+        # --- 圧力 ---
+        self.img = pg.ImageItem()
+        self.img.setRect(qtc.QRectF(0, 0, self.Lx*0.01, self.Ly*0.01))  # 空間サイズ
+        self.img.setZValue(-10)  # 圧力プロットを最背面に
+        self.plot.addItem(self.img)
+
+        p_inner = self.p[:, 1:-1, 1:-1]  # ゴーストセルを除く圧力配列
+        self.levels = (float(np.nanmin(p_inner)), float(np.nanmax(p_inner)))  # 圧力の最大値と最小値を取得 -> カラーバーの範囲設定
+        self.img.setLevels(self.levels)
+
+        self.colorBar = pg.ColorBarItem(values=self.levels, colorMap=self.cmap, interactive=False)
+        self.colorBar.setImageItem(self.img, insert_in=self.plot.getPlotItem())
+
+        # --- 速度ベクトル ---
+        self.vectorItem = pg.PlotDataItem(pen=pg.mkPen("w", width=1))
+        self.plot.addItem(self.vectorItem)
 
     def togglePlay(self):
         if self.timer.isActive():
@@ -128,50 +137,63 @@ class MainWindow(qtw.QMainWindow):
         self.currentFrame = (self.currentFrame + 1) % self.num_frames
         self.updateDisplay()
 
-    def createArrowItems(self):
-        # 矢印をプロットする座標配列
-        self.arrow_x:np.ndarray = self.X_grid[::self.vector_stride, ::self.vector_stride]
-        self.arrow_y:np.ndarray = self.Y_grid[::self.vector_stride, ::self.vector_stride]
-        self.arrows: list[pg.ArrowItem] = []  # ArrowItemを格納するリスト
-
-        for x, y in zip(self.arrow_x.ravel(), self.arrow_y.ravel()):  # ravel(): 配列を平坦化
-            # 全ての矢印を初期化
-            arrow = pg.ArrowItem(
-                pos = (float(x), float(y)),
-                angle = 0,
-                headLen = 12,
-                tipAngle = 25,
-                tailLen = 8,
-                tailWidth = 2,
-                brush = "w",
-                pen = "w"
-            )
-            self.plot.addItem(arrow)
-            self.arrows.append(arrow)
-
     def updateArrow(self, u_centered, v_centered):
-        u_sample = u_centered[::self.vector_stride, ::self.vector_stride]
-        v_sample = v_centered[::self.vector_stride, ::self.vector_stride]
-        speed = np.hypot(u_sample, v_sample)  # hypot() = sqrt(u**2 + v**2)
-        max_speed = float(np.nanmax(speed)) if speed.size else 0.0
+        # 矢印をプロットする座標
+        x = self.X_grid[1:-1, 1:-1][::self.vector_stride, ::self.vector_stride]
+        y = self.Y_grid[1:-1, 1:-1][::self.vector_stride, ::self.vector_stride]
+        # プロットする速度成分
+        u = u_centered[::self.vector_stride, ::self.vector_stride]
+        v = v_centered[::self.vector_stride, ::self.vector_stride]
 
-        for arrow, x, y, u_val, v_val, speed_val in zip(
-            self.arrows,
-            self.arrow_x.ravel(), 
-            self.arrow_y.ravel(), 
-            u_sample.ravel(), 
-            v_sample.ravel(), 
-            speed.ravel()
-        ):
-            if not np.isfinite(speed_val) or max_speed == 0.0:
-                arrow.setVisible(False)
-                continue
+        speed = np.hypot(u, v)  # hypot(u, v) = sqrt(u**2 + v**2)
+        maxSpeed = np.max(speed)
+        if not np.isfinite(maxSpeed) or maxSpeed == 0.0:
+            self.vectorItem.setData([], [])
+            return
+        
+        scale = 0.05 * max(self.Lx, self.Ly) / maxSpeed  # 最大速度が短辺の0.5倍の長さとなるように変換
 
-            angle = np.degrees(np.arctan2(v_val, u_val))
-            scale = 0.35 + 0.65 * speed_val / max_speed
-            arrow.setVisible(True)
-            arrow.setStyle(angle=float(angle), headLen=12*scale, tailLen=8*scale)
-            arrow.setPos(float(x), float(y))
+        # 矢印の始点
+        x0 = x
+        y0 = y
+        # 矢印の終点
+        x1 = x + u*scale
+        y1 = y + v*scale
+
+        # 単位ベクトル
+        ux = u / speed
+        uy = v / speed
+
+        valid = np.isfinite(speed) & (speed > 0)
+        ux = np.where(valid, ux, 0)
+        uy = np.where(valid, uy, 0)
+
+        # 矢尻サイズ
+        arrow_len = 0.25 * scale * maxSpeed
+        arrow_width = 0.12 * scale * maxSpeed
+
+        # 進行方向と逆向きに戻り、法線方向へ左右に開く
+        left_x = x1 - arrow_len * ux - arrow_width * (-uy)
+        left_y = y1 - arrow_len * uy - arrow_width * ux
+
+        right_x = x1 - arrow_len * ux + arrow_width * (-uy)
+        right_y = y1 - arrow_len * uy + arrow_width * ux
+
+        nan = np.full(x.size, np.nan)
+
+        xs = np.column_stack([
+            x0.ravel(), x1.ravel(), nan,          # 胴体
+            x1.ravel(), left_x.ravel(), nan,      # 左矢尻
+            x1.ravel(), right_x.ravel(), nan,     # 右矢尻
+        ]).ravel()
+
+        ys = np.column_stack([
+            y0.ravel(), y1.ravel(), nan,
+            y1.ravel(), left_y.ravel(), nan,
+            y1.ravel(), right_y.ravel(), nan,
+        ]).ravel()
+
+        self.vectorItem.setData(xs, ys)
 
 data_dir = "/Users/fukuchikeita/Documents/programing/python/science/数値解析/data"
 loader = np.load(os.path.join(data_dir, "simulation_results.npz"), allow_pickle=True)
@@ -181,13 +203,13 @@ p = loader["p_ani"]
 params = loader["params"].item()
 
 Lx, Ly = params["Lx"], params["Ly"]
+print(Lx, Ly)
 T = params["t"]
 dx, dy = params["dx"], params["dy"]
 spf = params["spf"]
 
 x, y = np.arange(0, Lx, dx), np.arange(0, Ly, dy)
 X, Y = np.meshgrid(x, y, indexing='ij')
-
 
 
 num_frames = len(p)
