@@ -84,43 +84,50 @@ def calc_intermediate_velocity(u_0: mx.array, v_0: mx.array, dx: float, dy:float
 
     return u_star, v_star
 
-def update_pressure(u_star: mx.array, v_star: mx.array, p_0: mx.array, dx: float, dy: float, dt: float, rho: float, max_iter:int=100, max_tor:float = 1e-5) -> mx.array:
+def update_pressure(u_star: mx.array, v_star: mx.array, p_0: mx.array, dx: float, dy: float, dt: float, rho: float, max_iter:int=100, max_tor:float = 1e-5, omega: float = 1.5, check_interval: int = 10) -> mx.array:
     """
-    ポアソン方程式を解く
+    ポアソン方程式をSOR法で解く
+
+    Parameters
+    ----------
+    omega : float
+        SOR緩和係数 (1 < omega < 2)。大きいほど収束が速いが不安定になる場合がある。
+        デフォルト 1.5。
+    check_interval : int
+        収束判定を行う反復間隔。ホスト同期の頻度を下げて計算効率を向上させる。
+        デフォルト 10。
     """
     S = mx.zeros_like(p_0)
 
     nx, ny = p_0.shape
     S[1:-1, 1:-1] = rho / dt * ((u_star[2:nx, 1:ny-1] - u_star[1:nx-1, 1:ny-1]) / dx + (v_star[1:nx-1, 2:ny] - v_star[1:nx-1, 1:ny-1]) / dy)
 
-    p_new = mx.array(p_0)
-    for _ in range(max_iter):
-        p_new[1:-1, 1:-1] = (dx**2 * (p_0[1:-1, 2:] + p_0[1:-1, 0:-2]) + dy**2 * (p_0[2:, 1:-1] + p_0[0:-2, 1:-1]) - (dx*dy)**2 * S[1:-1, 1:-1]) / (2 * (dx**2 + dy**2))
-        
+    p = mx.array(p_0)
+    denom = 2 * (dx**2 + dy**2)
+    for i in range(max_iter):
+        p_old = mx.array(p)
+
+        # Jacobi更新量をSORで混合
+        p_jacobi = (dx**2 * (p[1:-1, 2:] + p[1:-1, 0:-2]) + dy**2 * (p[2:, 1:-1] + p[0:-2, 1:-1]) - (dx*dy)**2 * S[1:-1, 1:-1]) / denom
+        p[1:-1, 1:-1] = (1.0 - omega) * p[1:-1, 1:-1] + omega * p_jacobi
+
         # 境界条件の適用(壁での圧力勾配がゼロ)
         # 左右の壁
-        p_new[0, :]  = p_new[1, :]   # 左壁
-        p_new[-1, :] = 0             # 右壁: 流出 -> 外部に開放 -> p = 0(基準圧力)
+        p[0, :]  = p[1, :]   # 左壁
+        p[-1, :] = 0          # 右壁: 流出 -> 外部に開放 -> p = 0(基準圧力)
         # 上下の壁
-        p_new[:, 0]  = p_new[:, 1]   # 下壁
-        p_new[:, -1] = p_new[:, -2]  # 上壁
-        
-        # 新旧の圧力の誤差を計算
-        tor = mx.max(mx.abs(p_0 - p_new))  # 誤差行列の要素の最大値
-        # 収束判定
-        if tor <= max_tor:
-            return p_new
-        
-        # 収束しない場合
-        if _ == max_iter-1:
-            if tor > max_tor:
+        p[:, 0]  = p[:, 1]   # 下壁
+        p[:, -1] = p[:, -2]  # 上壁
+
+        # check_interval ごとに収束判定 (ホスト同期の頻度を低減)
+        if (i + 1) % check_interval == 0 or i == max_iter - 1:
+            tor = mx.max(mx.abs(p_old - p)).item()  # ホスト同期
+            if tor <= max_tor:
+                return p
+            if i == max_iter - 1:
                 print("収束しませんでした")
-                break
 
-        # 圧力を更新
-        p_0 = mx.array(p_new)
-
-    return p_new
+    return p
 
 @mx.compile
 def calc_final_velocity(u_star: mx.array, v_star: mx.array, p_new: mx.array, dx: float, dy: float, dt: float, rho: float) -> tuple[mx.array, mx.array]:
@@ -168,6 +175,7 @@ def step_mlx(
         rho: float, 
         max_iter: int=100, 
         max_tor: float=1e-5,
+        omega: float=1.5,
     ) -> tuple[mx.array, mx.array, mx.array]:
     # ====================
     #      ステップ1
@@ -178,7 +186,7 @@ def step_mlx(
     # ====================
     #      ステップ2
     # ====================
-    p_new = update_pressure(u_star, v_star, p_0, dx, dy, dt, rho, max_iter, max_tor)
+    p_new = update_pressure(u_star, v_star, p_0, dx, dy, dt, rho, max_iter, max_tor, omega)
 
     # ====================
     #      ステップ3

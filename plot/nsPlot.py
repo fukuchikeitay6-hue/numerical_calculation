@@ -92,7 +92,7 @@ class MainWindow(qtw.QMainWindow):
     def createGraphItems(self):
         # --- 圧力 ---
         self.img = pg.ImageItem()
-        self.img.setRect(qtc.QRectF(0, 0, self.Lx*0.01, self.Ly*0.01))  # 空間サイズ
+        self.img.setRect(qtc.QRectF(0, 0, self.Lx, self.Ly))  # 空間サイズ
         self.img.setZValue(-10)  # 圧力プロットを最背面に
         self.plot.addItem(self.img)
 
@@ -160,17 +160,14 @@ class MainWindow(qtw.QMainWindow):
         x1 = x + u*scale
         y1 = y + v*scale
 
-        # 単位ベクトル
-        ux = u / speed
-        uy = v / speed
+        # 単位ベクトル (speed=0 のセルはゼロベクトルにする)
+        safe_speed = np.where(speed > 0, speed, 1.0)
+        ux = np.where(speed > 0, u / safe_speed, 0.0)
+        uy = np.where(speed > 0, v / safe_speed, 0.0)
 
-        valid = np.isfinite(speed) & (speed > 0)
-        ux = np.where(valid, ux, 0)
-        uy = np.where(valid, uy, 0)
-
-        # 矢尻サイズ
-        arrow_len = 0.25 * scale * maxSpeed
-        arrow_width = 0.12 * scale * maxSpeed
+        # 矢尻サイズ: 各格子点の速度の大きさに比例
+        arrow_len = 0.25 * scale * speed
+        arrow_width = 0.12 * scale * speed
 
         # 進行方向と逆向きに戻り、法線方向へ左右に開く
         left_x = x1 - arrow_len * ux - arrow_width * (-uy)
