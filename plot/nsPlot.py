@@ -30,7 +30,7 @@ def createSturucturedArray(X:np.ndarray, Y: np.ndarray, u: np.ndarray, v: np.nda
     return data
 
 class MainWindow(qtw.QMainWindow):
-    def __init__(self, p, u, v, X, Y, Lx, Ly, num_frames, spf, interval_ms: int, vector_stride:int=0, parent=None):
+    def __init__(self, p, u, v, X, Y, Lx, Ly, num_frames, spf, interval_ms: int, vector_stride_x:int=0, vector_stride_y:int=0, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Navier-Stokes equation viewer")
         self.resize(800, 800)
@@ -45,7 +45,8 @@ class MainWindow(qtw.QMainWindow):
         self.num_frames = num_frames
         self.spf = spf
         self.interval_ms = interval_ms
-        self.vector_stride = max(1, vector_stride)
+        self.vector_stride_x = max(1, vector_stride_x)
+        self.vector_stride_y = max(1, vector_stride_y)
 
         self.currentFrame = 0
 
@@ -88,6 +89,13 @@ class MainWindow(qtw.QMainWindow):
         self.slider.valueChanged.connect(self.setFrame)
         controls.addWidget(self.slider)
 
+        self.nextBtn = qtw.QPushButton("次")
+        self.nextBtn.clicked.connect(self.toggleNextFrame)
+        self.prevBtn = qtw.QPushButton("前")
+        self.prevBtn.clicked.connect(self.togglePrevFrame)
+        controls.addWidget(self.prevBtn)
+        controls.addWidget(self.nextBtn)
+
     def createGraphItems(self):
         # --- 圧力 ---
         self.img = pg.ImageItem()
@@ -109,8 +117,12 @@ class MainWindow(qtw.QMainWindow):
     def togglePlay(self):
         if self.timer.isActive():
             self.timer.stop()
+            self.nextBtn.setEnabled(True)
+            self.prevBtn.setEnabled(True)
         else:
             self.timer.start()
+            self.nextBtn.setEnabled(False)
+            self.prevBtn.setEnabled(False)
 
     def updateDisplay(self):
         p = self.p[self.currentFrame]
@@ -138,11 +150,11 @@ class MainWindow(qtw.QMainWindow):
 
     def updateArrow(self, u_centered, v_centered):
         # 矢印をプロットする座標
-        x = self.X_grid[1:-1, 1:-1][::self.vector_stride, ::self.vector_stride]
-        y = self.Y_grid[1:-1, 1:-1][::self.vector_stride, ::self.vector_stride]
+        x = self.X_grid[1:-1, 1:-1][::self.vector_stride_x, ::self.vector_stride_y]
+        y = self.Y_grid[1:-1, 1:-1][::self.vector_stride_x, ::self.vector_stride_y]
         # プロットする速度成分
-        u = u_centered[::self.vector_stride, ::self.vector_stride]
-        v = v_centered[::self.vector_stride, ::self.vector_stride]
+        u = u_centered[::self.vector_stride_x, ::self.vector_stride_y]
+        v = v_centered[::self.vector_stride_x, ::self.vector_stride_y]
 
         speed = np.hypot(u, v)  # hypot(u, v) = sqrt(u**2 + v**2)
         maxSpeed = np.max(speed)
@@ -192,6 +204,18 @@ class MainWindow(qtw.QMainWindow):
 
         self.vectorItem.setData(xs, ys)
 
+    def toggleNextFrame(self):
+        if self.currentFrame == num_frames - 1:
+            return
+        self.currentFrame += 1
+        self.updateDisplay()
+
+    def togglePrevFrame(self):
+        if self.currentFrame == 0:
+            return
+        self.currentFrame -= 1
+        self.updateDisplay()
+
 data_dir = "/Users/fukuchikeita/Documents/programing/python/science/数値解析/data"
 loader = np.load(os.path.join(data_dir, "simulation_results.npz"), allow_pickle=True)
 u = loader["u_ani"]
@@ -216,6 +240,6 @@ num_frames = len(p)
 
 if __name__ == "__main__":
     app = qtw.QApplication(sys.argv)
-    window = MainWindow(p, u, v, X, Y, Lx, Ly, num_frames, spf, 10, 10)
+    window = MainWindow(p, u, v, X, Y, Lx, Ly, num_frames, spf, 10, 10, 10)
     window.show()
     sys.exit(app.exec())

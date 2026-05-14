@@ -1,5 +1,6 @@
 import numpy as np
 import mlx.core as mx
+import os
 
 _RB_MASK_CACHE = {}
 
@@ -233,13 +234,13 @@ def main() -> None:
     dx, dy = Lx*1e-2, Ly*1e-2
     x, y = mx.arange(0, Lx, dx), mx.arange(0, Ly, dy)
     Nx, Ny = len(x), len(y)
-    T = 0.001
+    T = 0.1
     dt = 0.000001
     t = mx.arange(0, T, dt)
     nt = len(t)
     nu = 1e-6
     rho = 1.0
-    sps = 5  # steps per save
+    sps = 100  # steps per save
     spf = dt * sps # seconds per frame
 
     # 配列の初期化 (前回のA案：数学的座標系に合わせて i=x, j=y)
@@ -247,17 +248,17 @@ def main() -> None:
     v = mx.zeros((Nx+2, Ny+3))
     p = mx.zeros((Nx+2, Ny+2))
 
-    u[0, 25] = 1.0 
+    u[0, :] = 1.0 
 
     p_ani = []
     u_ani = []
     v_ani = []
     # --- 時間発展ループ ---
     for n in range(nt):
-        u, v, p = step_mlx(u, v, p, dx, dy, dt, nu, rho, max_iter=10000, max_tor=1e-4)
+        u, v, p = step_mlx(u, v, p, dx, dy, dt, nu, rho, max_iter=20000, max_tor=1e-4, omega=1.8)
         mx.eval(u, v, p)
         if n % sps == 0:
-            print(f"Step {n} completed.")
+            print(f"Step {n}({(n/nt*100):.2f}%) completed.")
             p_ani.append(p)
             u_ani.append(u)
             v_ani.append(v)
@@ -275,7 +276,8 @@ def main() -> None:
     }
 
     # --- 結果を保存 ---
-    np.savez("simulation_results.npz", p_ani=p_ani, u_ani=u_ani, v_ani=v_ani, params=params)
+    output_dir = "/Users/fukuchikeita/Documents/programing/python/science/数値解析/data"
+    np.savez(os.path.join(output_dir, "simulation_results.npz"), p_ani=p_ani, u_ani=u_ani, v_ani=v_ani, params=params)
     print("シミュレーション結果をsimulation_results.npzに保存しました。")
 
 if __name__ == "__main__":
