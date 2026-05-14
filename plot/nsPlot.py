@@ -75,7 +75,6 @@ class MainWindow(qtw.QMainWindow):
 
         self.createGraphItems()
 
-        # --- ベクトル描画 ---
         controls = qtw.QHBoxLayout()
         mainLayout.addLayout(controls)
 
@@ -92,7 +91,7 @@ class MainWindow(qtw.QMainWindow):
     def createGraphItems(self):
         # --- 圧力 ---
         self.img = pg.ImageItem()
-        self.img.setRect(qtc.QRectF(0, 0, self.Lx, self.Ly))  # 空間サイズ
+        self.img.setRect((0, 0, self.Lx*1e-2, self.Ly*1e-2))  # 空間サイズ(なぜかLx, Lyが100倍されるため1e-2をかけている)
         self.img.setZValue(-10)  # 圧力プロットを最背面に
         self.plot.addItem(self.img)
 
@@ -106,12 +105,6 @@ class MainWindow(qtw.QMainWindow):
         # --- 速度ベクトル ---
         self.vectorItem = pg.PlotDataItem(pen=pg.mkPen("w", width=1))
         self.plot.addItem(self.vectorItem)
-
-        # 表示範囲を物理長さに固定（ベクトル描画によるオートレンジ拡張を防ぐ）
-        self.plot.setLimits(xMin=0.0, xMax=self.Lx, yMin=0.0, yMax=self.Ly)
-        self.plot.setXRange(0.0, self.Lx, padding=0.0)
-        self.plot.setYRange(0.0, self.Ly, padding=0.0)
-        self.plot.enableAutoRange(axis=pg.ViewBox.XYAxes, enable=False)
 
     def togglePlay(self):
         if self.timer.isActive():
