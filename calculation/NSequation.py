@@ -1,6 +1,8 @@
 import numpy as np
 import mlx.core as mx
 
+_RB_MASK_CACHE = {}
+
 @mx.compile
 def calc_intermediate_velocity(u_0: mx.array, v_0: mx.array, dx: float, dy:float, dt:float, nu:float) -> tuple[mx.array, mx.array]:
     """
@@ -104,12 +106,42 @@ def update_pressure(u_star: mx.array, v_star: mx.array, p_0: mx.array, dx: float
 
     p = mx.array(p_0)
     denom = 2 * (dx**2 + dy**2)
-    for i in range(max_iter):
-        p_old = mx.array(p)
 
-        # Jacobi更新量をSORで混合
-        p_jacobi = (dx**2 * (p[1:-1, 2:] + p[1:-1, 0:-2]) + dy**2 * (p[2:, 1:-1] + p[0:-2, 1:-1]) - (dx*dy)**2 * S[1:-1, 1:-1]) / denom
-        p[1:-1, 1:-1] = (1.0 - omega) * p[1:-1, 1:-1] + omega * p_jacobi
+    # Red-Black SOR 用マスク（内部セルのみ）をキャッシュ
+    mask_key = (nx, ny)
+    if mask_key in _RB_MASK_CACHE:
+        red_mask_inner, black_mask_inner = _RB_MASK_CACHE[mask_key]
+    else:
+        i_idx = mx.arange(nx - 2)[:, None]
+        j_idx = mx.arange(ny - 2)[None, :]
+        red_mask_inner = ((i_idx + j_idx) % 2) == 0
+        black_mask_inner = ((i_idx + j_idx) % 2) == 1
+        _RB_MASK_CACHE[mask_key] = (red_mask_inner, black_mask_inner)
+
+    for i in range(max_iter):
+        check_now = (i + 1) % check_interval == 0 or i == max_iter - 1
+        if check_now:
+            p_old = mx.array(p)
+
+        # 1) Red セル更新（Black は据え置き）
+        p_core = (
+            dx**2 * (p[1:-1, 2:] + p[1:-1, 0:-2])
+            + dy**2 * (p[2:, 1:-1] + p[0:-2, 1:-1])
+            - (dx * dy) ** 2 * S[1:-1, 1:-1]
+        ) / denom
+        p_inner = p[1:-1, 1:-1]
+        p_relaxed = (1.0 - omega) * p_inner + omega * p_core
+        p[1:-1, 1:-1] = mx.where(red_mask_inner, p_relaxed, p_inner)
+
+        # 2) Black セル更新（更新済み Red を参照）
+        p_core = (
+            dx**2 * (p[1:-1, 2:] + p[1:-1, 0:-2])
+            + dy**2 * (p[2:, 1:-1] + p[0:-2, 1:-1])
+            - (dx * dy) ** 2 * S[1:-1, 1:-1]
+        ) / denom
+        p_inner = p[1:-1, 1:-1]
+        p_relaxed = (1.0 - omega) * p_inner + omega * p_core
+        p[1:-1, 1:-1] = mx.where(black_mask_inner, p_relaxed, p_inner)
 
         # 境界条件の適用(壁での圧力勾配がゼロ)
         # 左右の壁
@@ -120,12 +152,12 @@ def update_pressure(u_star: mx.array, v_star: mx.array, p_0: mx.array, dx: float
         p[:, -1] = p[:, -2]  # 上壁
 
         # check_interval ごとに収束判定 (ホスト同期の頻度を低減)
-        if (i + 1) % check_interval == 0 or i == max_iter - 1:
+        if check_now:
             tor = mx.max(mx.abs(p_old - p)).item()  # ホスト同期
             if tor <= max_tor:
                 return p
             if i == max_iter - 1:
-                print("収束しませんでした")
+                print(f"収束しませんでした: tor={tor:.3e}, max_iter={max_iter}, omega={omega}")
 
     return p
 

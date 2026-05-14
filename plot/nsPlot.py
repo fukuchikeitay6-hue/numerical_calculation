@@ -161,9 +161,10 @@ class MainWindow(qtw.QMainWindow):
         y1 = y + v*scale
 
         # 単位ベクトル (speed=0 のセルはゼロベクトルにする)
-        safe_speed = np.where(speed > 0, speed, 1.0)
-        ux = np.where(speed > 0, u / safe_speed, 0.0)
-        uy = np.where(speed > 0, v / safe_speed, 0.0)
+        mask = speed > 0
+        safe_speed = np.where(mask, speed, 1.0)
+        ux = np.where(mask, u / safe_speed, 0.0)
+        uy = np.where(mask, v / safe_speed, 0.0)
 
         # 矢尻サイズ: 各格子点の速度の大きさに比例
         arrow_len = 0.25 * scale * speed
