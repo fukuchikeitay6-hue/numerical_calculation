@@ -206,7 +206,10 @@ T = params["t"]
 dx, dy = params["dx"], params["dy"]
 spf = params["spf"]
 
-x, y = np.arange(0, Lx, dx), np.arange(0, Ly, dy)
+# p はゴーストセル込みで保存されるため、座標格子も同じ形状で作る
+nx_p, ny_p = p.shape[1], p.shape[2]
+x = np.linspace(-dx, Lx, nx_p)
+y = np.linspace(-dy, Ly, ny_p)
 X, Y = np.meshgrid(x, y, indexing='ij')
 
 
